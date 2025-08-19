@@ -1,0 +1,20 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh; /* 최소 높이 설정 */
+  overflow-x: hidden; /* 가로 스크롤 방지 */
+  font-family: Arial, sans-serif;
+  background-color: #fff;
+}
+
+body {
+  font-family: "Pretendard";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+code {
+  font-family: "Pretendard";
+}
