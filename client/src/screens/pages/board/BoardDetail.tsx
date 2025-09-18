@@ -6,6 +6,7 @@ import { MdOutlineRemoveRedEye, MdOutlineAccessTime } from "react-icons/md";
 import DateFormmating from '../../../components/DateFormmating';
 import { useRecoilValue } from 'recoil';
 import { recoilLoginState, recoilUserData } from '../../../RecoilStore';
+import Footer from '../../../components/Footer';
 
 
 
@@ -112,6 +113,8 @@ export default function BoardDetail (props:any) {
         </div>
       </div>
 
+      <Footer />
+      
     </div>
   )
 }

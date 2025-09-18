@@ -10,7 +10,10 @@ router.use(bodyParser.urlencoded({extended:true}));
 const multer  = require('multer')
 var fs = require("fs");
 
-const escapeQuotes = (str) => str.replaceAll('è', '\è').replaceAll("'", "\\\'").replaceAll('"', '\\\"').replaceAll('\\n', '\\\\n');
+const escapeQuotes = (str) => {
+  if (!str) return '';
+  return str.replaceAll('è', '\è').replaceAll("'", "\\\'").replaceAll('"', '\\\"').replaceAll('\\n', '\\\\n');
+};
 
 // 메인 데이터
 router.get('/getmaininfo', async (req, res) => {
@@ -117,27 +120,32 @@ router.post('/updatemaininfo', async (req, res) => {
 
 // 업로드 저장소 설정
 const noticeStorage = multer.diskStorage({
-  destination(req, file, done) {
-    done(null, 'build/images/notice');
-  },
+  destination(req, file, done) { 
+    // 디렉토리가 존재하지 않으면 생성
+    const dir = 'build/images/notice';
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    done(null, dir);
+  }, 
   filename(req, file, done) {
     done(null, file.originalname);
   }
 });
 
 const galleryStorage = multer.diskStorage({
-  destination(req, file, done) {
+  destination(req, file, done) { 
     done(null, 'build/images/gallery');
-  },
+  }, 
   filename(req, file, done) {
     done(null, file.originalname);
   }
 });
 
 const mainImageStorage = multer.diskStorage({
-  destination(req, file, done) {
+  destination(req, file, done) { 
     done(null, 'build/images/mainimages');
-  },
+  }, 
   filename(req, file, done) {
     done(null, file.originalname);
   }
@@ -153,8 +161,14 @@ router.post('/upload/notice', uploadNotice.single('img'), (req, res) => {
     res.send(false);
     return res.end();
   }
-  res.json({ filename: req.file.originalname });
-  res.end();
+  try {
+    res.json({ filename: req.file.originalname });
+    res.end();
+  } catch (error) {
+    console.error('이미지 업로드 오류:', error);
+    res.send(false);
+    res.end();
+  }
 });
 
 router.post('/upload/gallery', uploadGallery.array('img'), (req, res) => {
@@ -162,9 +176,15 @@ router.post('/upload/gallery', uploadGallery.array('img'), (req, res) => {
     res.send(false);
     return res.end();
   }
-  const filenames = req.files.map(f => f.originalname);
-  res.json({ filenames });
-  res.end();
+  try {
+    const filenames = req.files.map(f => f.originalname);
+    res.json({ filenames });
+    res.end();
+  } catch (error) {
+    console.error('갤러리 이미지 업로드 오류:', error);
+    res.send(false);
+    res.end();
+  }
 });
 
 router.post('/upload/mainimage', uploadMainImage.single('img'), (req, res) => {
@@ -172,8 +192,14 @@ router.post('/upload/mainimage', uploadMainImage.single('img'), (req, res) => {
     res.send(false);
     return res.end();
   }
-  res.json({ filename: req.file.originalname });
-  res.end();
+  try {
+    res.json({ filename: req.file.originalname });
+    res.end();
+  } catch (error) {
+    console.error('메인 이미지 업로드 오류:', error);
+    res.send(false);
+    res.end();
+  }
 });
 
 
@@ -212,6 +238,46 @@ router.post('/gallery/update', async (req, res) => {
       }
     });
   } catch (error) {
+    res.send(false);
+    res.end();
+  }
+});
+
+// 이미지 삭제 API
+router.post('/deleteimage', async (req, res) => {
+  const { filename } = req.body;
+  
+  if (!filename) {
+    res.send(false);
+    res.end();
+    return;
+  }
+
+  try {
+    // 파일 경로 설정 - build 폴더 내의 경로 사용
+    const filePath = `./build/images/notice/${filename}`;
+    
+    // 파일이 존재하는지 확인
+    if (fs.existsSync(filePath)) {
+      // 파일 삭제 - 비동기 방식으로 변경
+      fs.unlink(filePath, (err) => {
+        if (err) {
+          console.error('파일 삭제 중 오류:', err);
+          res.send(false);
+          res.end();
+        } else {
+          console.log(`이미지 파일 삭제됨: ${filename}`);
+          res.send(true);
+          res.end();
+        }
+      });
+    } else {
+      console.log(`파일을 찾을 수 없음: ${filename}`);
+      res.send(false);
+      res.end();
+    }
+  } catch (error) {
+    console.error('이미지 삭제 오류:', error);
     res.send(false);
     res.end();
   }
@@ -262,6 +328,88 @@ router.post('/practice/update', async (req, res) => {
       }
     });
   } catch (error) {
+    res.send(false);
+    res.end();
+  }
+});
+
+// 개별 서비스 항목 업데이트
+router.post('/updateserviceitem', async (req, res) => {
+  const { id, title, content, image, index, action } = req.body;
+  
+  try {
+    // 먼저 현재 mainService 데이터를 가져옴
+    const getQuery = `SELECT mainService FROM mainInfo WHERE id = ?`;
+    db.query(getQuery, [id], function (error, result) {
+      if (error) { 
+        console.error('서비스 데이터 조회 오류:', error);
+        res.send(false);
+        res.end();
+        return;
+      }
+      
+      if (result.length === 0) {
+        res.send(false);
+        res.end();
+        return;
+      }
+      
+      try {
+        // JSON 파싱
+        const mainServiceList = JSON.parse(result[0].mainService || '[]');
+        
+        if (action === 'delete') {
+          // 삭제 액션
+          if (index >= 0 && index < mainServiceList.length) {
+            mainServiceList.splice(index, 1);
+          }
+        } else {
+          // 업데이트 또는 추가 액션
+          if (index >= 0 && index < mainServiceList.length) {
+            // 기존 항목 업데이트
+            mainServiceList[index] = {
+              title: title || '',
+              content: content || [],
+              image: image || ''
+            };
+          } else {
+            // 새 항목 추가
+            mainServiceList.push({
+              title: title || '',
+              content: content || [],
+              image: image || ''
+            });
+          }
+        }
+        
+        // 업데이트된 데이터를 다시 저장
+        const updateQuery = `UPDATE mainInfo SET mainService = ? WHERE id = ?`;
+        const updatedMainService = JSON.stringify(mainServiceList);
+        
+        db.query(updateQuery, [updatedMainService, id], function (updateError, updateResult) {
+          if (updateError) {
+            console.error('서비스 항목 업데이트 오류:', updateError);
+            res.send(false);
+            res.end();
+            return;
+          }
+          
+          if (updateResult.affectedRows > 0) {
+            res.send(true);
+            res.end();
+          } else {
+            res.send(false);
+            res.end();
+          }
+        });
+      } catch (parseError) {
+        console.error('JSON 파싱 오류:', parseError);
+        res.send(false);
+        res.end();
+      }
+    });
+  } catch (error) {
+    console.error('서비스 항목 업데이트 오류:', error);
     res.send(false);
     res.end();
   }
