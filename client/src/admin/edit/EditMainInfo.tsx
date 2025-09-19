@@ -53,6 +53,10 @@ export default function EditMainInfo() {
   // 개별 서비스 항목 수정을 위한 상태
   const [editingServiceIndex, setEditingServiceIndex] = useState<number>(-1);
   const [editingService, setEditingService] = useState<any>(null);
+  
+  // 개별 시설 항목 수정을 위한 상태
+  const [editingFacilityIndex, setEditingFacilityIndex] = useState<number>(-1);
+  const [editingFacility, setEditingFacility] = useState<any>(null);
 
   // 이미지 첨부 함수
   const currentDate = new Date();
@@ -172,6 +176,63 @@ export default function EditMainInfo() {
     setServiceImageFiles({});
   };
 
+  // 개별 시설 항목 수정 함수들
+  const startEditFacility = (facilityIndex: number) => {
+    setEditingFacilityIndex(facilityIndex);
+    setEditingFacility({ ...facilityList[facilityIndex] });
+    setFacilityImageFiles({ [facilityIndex]: [] });
+  };
+
+  const cancelEditFacility = () => {
+    setEditingFacilityIndex(-1);
+    setEditingFacility(null);
+    setFacilityImageFiles({});
+  };
+
+  const saveFacilityItem = async (facilityIndex: number) => {
+    if (!editingFacility) return;
+
+    try {
+      // 이미지가 첨부된 경우 업로드
+      let imageFilename = editingFacility.image;
+      if (facilityImageFiles[facilityIndex] && facilityImageFiles[facilityIndex].length > 0) {
+        const uploadedFilename = await uploadImage(facilityImageFiles[facilityIndex][0]);
+        if (uploadedFilename) {
+          imageFilename = uploadedFilename;
+        }
+      }
+
+      // 서버에 개별 항목 업데이트 요청
+      const payload = {
+        id: form?.id,
+        title: editingFacility.title,
+        image: imageFilename,
+        index: facilityIndex
+      };
+
+      const res = await axios.post(`${MainURL}/main/updatefacilityitem`, payload);
+      if (res.data === true) {
+        // 로컬 상태 업데이트
+        const updatedFacilityList = facilityList.map((item, i) => 
+          i === facilityIndex ? { ...editingFacility, image: imageFilename } : item
+        );
+        setFacilityList(updatedFacilityList);
+
+        // 수정 모드 종료
+        setEditingFacilityIndex(-1);
+        setEditingFacility(null);
+        setFacilityImageFiles({});
+
+        alert('시설 항목이 저장되었습니다.');
+      } else {
+        alert('저장에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('시설 항목 저장 오류:', error);
+      alert('저장 중 오류가 발생했습니다.');
+    }
+  };
+
   const saveServiceItem = async (serviceIndex: number) => {
     if (!editingService) return;
     
@@ -187,7 +248,7 @@ export default function EditMainInfo() {
 
       // 서버에 개별 항목 업데이트 요청
       const payload = {
-        id: editingService.id || serviceIndex,
+        id: form?.id,
         title: editingService.title,
         content: editingService.content,
         image: imageFilename,
@@ -398,7 +459,7 @@ export default function EditMainInfo() {
                             borderRadius: '4px'
                           }}
                           onClick={async () => {
-                            if (window.confirm('이 서비스 항목을 삭제하시겠습니까?')) {
+                            if (window.confirm(`<${svc.title}> 서비스 항목을 삭제하시겠습니까? 삭제후에는 되돌릴수 없습니다.`)) {
                               try {
                                 // 서버에 삭제 요청
                                 const payload = {
@@ -481,8 +542,10 @@ export default function EditMainInfo() {
                               fontSize: '12px', 
                               padding: '4px 8px', 
                               backgroundColor: '#4CAF50',
-                              color: 'white',
-                              marginTop: '8px'
+                              color: 'white', 
+                              marginTop: '8px',
+                              display: 'inline-flex',
+                              width: 'auto'
                             }}
                             onClick={() => {
                               setEditingService({ 
@@ -506,7 +569,9 @@ export default function EditMainInfo() {
                                 style={{ 
                                   fontSize: '10px', 
                                   padding: '4px 8px', 
-                                  marginLeft: '8px'
+                                  marginLeft: '8px',
+                                  display: 'inline-flex',
+                                  width: 'auto'
                                 }}
                                 onClick={async () => {
                                   if (window.confirm('이 이미지를 삭제하시겠습니까?')) {
@@ -620,105 +685,152 @@ export default function EditMainInfo() {
               <label>시설 정보</label>
               <div className="adminRepeater">
                 {facilityList.map((fc:any, fi:number)=> (
-                  <div key={fi} className="adminRepeatCard">
-                    <div style={{ display:'flex', gap:12, alignItems:'center', marginBottom:8 }}>
-                      {fc.image && (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <div key={fi} className="adminRepeatCard" style={{ 
+                    border: '1px solid #e0e0e0', 
+                    borderRadius: '8px', 
+                    padding: '16px', 
+                    marginBottom: '16px',
+                    backgroundColor: '#fafafa'
+                  }}>
+                    {/* 표시 영역 */}
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
+                      <div style={{ flex: 1 }}>
+                        <h4 style={{ margin: '0 0 8px 0', color: '#333' }}>{fc.title || '시설명 없음'}</h4>
+                        {fc.image && (
                           <img src={`${MainURL}/images/notice/${fc.image}`} 
-                            style={{ width:'200px', height:'auto', objectFit:'cover', borderRadius:6 }} />
-                          <div className='adminBtn danger' style={{ fontSize: '10px', padding: '4px 8px' }} onClick={async () => {
-                            if (window.confirm('이 이미지를 삭제하시겠습니까?')) {
+                            style={{ width:'200px', height:'auto', objectFit:'cover', borderRadius:6, marginBottom:8 }} />
+                        )}
+                      </div>
+                      <div style={{ display:'flex', gap:8, marginLeft:16 }}>
+                        <div 
+                          className='adminBtn'
+                          style={{ backgroundColor:'#2196F3', color:'#fff', padding:'6px 12px', fontSize:12, borderRadius:4 }}
+                          onClick={() => startEditFacility(fi)}
+                        >
+                          ✏️ 수정
+                        </div>
+                        <div 
+                          className='adminBtn danger'
+                          style={{ padding:'6px 12px', fontSize:12, borderRadius:4 }}
+                          onClick={async () => {
+                            if (window.confirm(`<${fc.title || '시설'}> 항목을 삭제하시겠습니까? 삭제후에는 되돌릴 수 없습니다.`)) {
                               try {
-                                const res = await axios.post(`${MainURL}/main/deleteimage`, { filename: fc.image });
+                                const payload = { id: form?.id, index: fi, action: 'delete' };
+                                const res = await axios.post(`${MainURL}/main/updatefacilityitem`, payload);
                                 if (res.data === true) {
-                                  const copy = facilityList.map((it:any, i:number)=> i===fi ? { ...it, image: '' } : it);
+                                  const copy = facilityList.filter((_:any, i:number)=> i!==fi);
                                   setFacilityList(copy);
-                                  alert('이미지가 삭제되었습니다.');
+                                  alert('시설 항목이 삭제되었습니다.');
                                 } else {
-                                  alert('이미지 삭제에 실패했습니다.');
+                                  alert('삭제에 실패했습니다.');
                                 }
                               } catch (error) {
-                                console.error('이미지 삭제 오류:', error);
-                                alert('이미지 삭제 중 오류가 발생했습니다.');
+                                console.error('시설 항목 삭제 오류:', error);
+                                alert('삭제 중 오류가 발생했습니다.');
                               }
                             }
-                          }}>
-                            삭제
-                          </div>
+                          }}
+                        >
+                          🗑️ 삭제
                         </div>
-                      )}
-                      
-                      <div className="imageInputBox" style={{ flex: 1 }}>
-                        {imageLoading ? (
-                          <div style={{width:'100%', height:'100%', position:'absolute'}}>
-                            <Loading/>
-                          </div>
-                        ) : (
-                          <div className='imageDropzoneCover'>
-                            <div 
-                              className="imageDropzoneStyle"
-                              onClick={() => {
-                                console.log('시설 드롭존 클릭됨, 인덱스:', fi);
-                                setCurrentFacilityIndex(fi);
-                              }}
-                            >
-                              <div {...facilityDropzone.getRootProps()}>
-                                <input {...facilityDropzone.getInputProps()} />
-                                {(facilityImageFiles[fi] || []).length > 0 
-                                  ? <div className='imageplus' style={buttonStyle}>+ 다시첨부하기</div>
-                                  : <div className='imageplus' style={buttonStyle}>+ 이미지첨부하기</div>
-                                }
+                      </div>
+                    </div>
+
+                    {/* 수정 모드 */}
+                    {editingFacilityIndex === fi && editingFacility && (
+                      <div style={{ border:'2px solid #2196F3', borderRadius:8, padding:16, backgroundColor:'#f8f9ff', marginTop:12 }}>
+                        <h5 style={{ margin:'0 0 12px 0', color:'#2196F3' }}>✏️ 시설 수정</h5>
+
+                        <div style={{ marginBottom:12 }}>
+                          <label style={{ display:'block', marginBottom:4, fontWeight:'bold' }}>시설명</label>
+                          <input 
+                            className="inputdefault"
+                            placeholder="시설명"
+                            value={editingFacility.title || ''}
+                            onChange={(e) => setEditingFacility({ ...editingFacility, title: e.target.value })}
+                            style={{ width:'100%' }}
+                          />
+                        </div>
+
+                        <div style={{ marginBottom:12 }}>
+                          <label style={{ display:'block', marginBottom:4, fontWeight:'bold' }}>이미지</label>
+                          {editingFacility.image && (
+                            <div style={{ marginBottom:8 }}>
+                              <img src={`${MainURL}/images/notice/${editingFacility.image}`} style={{ width:200, height:'auto', objectFit:'cover', borderRadius:6 }} />
+                              <div 
+                                className='adminBtn danger'
+                                style={{ fontSize:10, padding:'4px 8px', marginLeft:8, display:'inline-flex', width:'auto' }}
+                                onClick={async () => {
+                                  if (window.confirm('이 이미지를 삭제하시겠습니까?')) {
+                                    try {
+                                      const res = await axios.post(`${MainURL}/main/deleteimage`, { filename: editingFacility.image });
+                                      if (res.data === true) {
+                                        setEditingFacility({ ...editingFacility, image: '' });
+                                        alert('이미지가 삭제되었습니다.');
+                                      } else {
+                                        alert('이미지 삭제에 실패했습니다.');
+                                      }
+                                    } catch (error) {
+                                      console.error('이미지 삭제 오류:', error);
+                                      alert('이미지 삭제 중 오류가 발생했습니다.');
+                                    }
+                                  }
+                                }}
+                              >
+                                기존 이미지 삭제
                               </div>
                             </div>
+                          )}
+
+                          <div className="imageInputBox" style={{ position:'relative' }}>
+                            {imageLoading ? (
+                              <div style={{width:'100%', height:'100%', position:'absolute'}}>
+                                <Loading/>
+                              </div>
+                            ) : (
+                              <div className='imageDropzoneCover'>
+                                <div 
+                                  className="imageDropzoneStyle"
+                                  onClick={() => setCurrentFacilityIndex(fi)}
+                                >
+                                  <div {...facilityDropzone.getRootProps()}>
+                                    <input {...facilityDropzone.getInputProps()} />
+                                    {(facilityImageFiles[fi] || []).length > 0 
+                                      ? <div className='imageplus' style={buttonStyle}>+ 다시첨부하기</div>
+                                      : <div className='imageplus' style={buttonStyle}>+ 이미지첨부하기</div>
+                                    }
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {(facilityImageFiles[fi] || []).length > 0 && facilityImageFiles[fi].map((item: File, index: number) => (
+                              <div key={index} className='imagebox'>
+                                <img style={{width:200, height:'auto', objectFit:'cover', borderRadius:6}} src={URL.createObjectURL(item)} />
+                                <p>{item.name}</p>
+                                <div onClick={() => deleteFacilityImage(fi, index)}>
+                                  <CiCircleMinus color='#FF0000' size={20} />
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        )}
-                        
-                        {(facilityImageFiles[fi] || []).length > 0 && facilityImageFiles[fi].map((item: File, index: number) => (
-                          <div key={index} className='imagebox'>
-                            <img  style={{width:'200px', height:'auto', objectFit:'cover', borderRadius:6}}
-                              src={URL.createObjectURL(item)}
-                            />
-                            <p>{item.name}</p>
-                            <div onClick={() => deleteFacilityImage(fi, index)}>
-                              <CiCircleMinus color='#FF0000' size={20} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <input className="inputdefault" placeholder="시설명" value={fc.title || ''} onChange={(e)=>{
-                      const copy = facilityList.map((it:any, i:number)=> i===fi ? { ...it, title: e.target.value } : it);
-                      setFacilityList(copy);
-                    }} />
-                    {(facilityImageFiles[fi] || []).length > 0 && (
-                      <div className='adminBtn' style={{ marginTop: 8 }} onClick={async () => {
-                        if ((facilityImageFiles[fi] || []).length === 0) return;
-                        const filename = await uploadImage(facilityImageFiles[fi][0]);
-                        if (filename) {
-                          const copy = facilityList.map((it:any, i:number)=> i===fi ? { ...it, image: filename } : it);
-                          setFacilityList(copy);
-                          setFacilityImageFiles(prev => ({
-                            ...prev,
-                            [fi]: []
-                          }));
-                          alert('이미지가 적용되었습니다.');
-                        } else {
-                          alert('이미지 업로드에 실패했습니다.');
-                        }
-                      }}>
-                        이미지 적용하기
+                        </div>
+
+                        <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+                          <div className='adminBtn' style={{ backgroundColor:'#f5f5f5', color:'#666', padding:'8px 16px', fontSize:12 }} onClick={cancelEditFacility}>❌ 취소</div>
+                          <div className='adminBtn' style={{ backgroundColor:'#4CAF50', color:'#fff', padding:'8px 16px', fontSize:12 }} onClick={() => saveFacilityItem(fi)}>💾 저장</div>
+                        </div>
                       </div>
                     )}
-                    <div className="adminBtnRow">
-                      <div className='adminBtn danger' onClick={()=>{
-                        const copy = facilityList.filter((_:any, i:number)=> i!==fi);
-                        setFacilityList(copy);
-                      }}>삭제</div>
-                    </div>
                   </div>
                 ))}
                 <div className='adminBtn' style={{backgroundColor:'#fff', color:'#333', border:'1px solid #ccc'}}
-                  onClick={()=> setFacilityList([ ...facilityList, { title: '', image: '' } ])}>시설 추가</div> 
+                  onClick={()=> {
+                    const newItem = { title: '', image: '' };
+                    setFacilityList([ ...facilityList, newItem ]);
+                    const newIndex = facilityList.length;
+                    setTimeout(() => { startEditFacility(newIndex); }, 100);
+                  }}>시설 추가</div> 
               </div>
             </div>
           </div>

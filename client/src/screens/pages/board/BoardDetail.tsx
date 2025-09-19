@@ -21,6 +21,44 @@ export default function BoardDetail (props:any) {
   
   const images = location.state.images ? JSON.parse(location.state.images) : [];
 
+  // 편집 상태
+  const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [editTitle, setEditTitle] = useState<string>(propsData?.title || '');
+  const [editContent, setEditContent] = useState<string>(propsData?.content || '');
+
+  const startEdit = () => {
+    setEditTitle(propsData?.title || '');
+    setEditContent(propsData?.content || '');
+    setIsEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setIsEditing(false);
+  };
+
+  const saveEdit = async () => {
+    try {
+      const payload = {
+        id: propsData.id,
+        title: editTitle,
+        content: editContent
+      };
+      const res = await axios.post(`${MainURL}/board/updatepost`, payload);
+      if (res.data === true) {
+        alert('수정되었습니다.');
+        // 로컬 표시 즉시 반영
+        propsData.title = editTitle;
+        propsData.content = editContent;
+        setIsEditing(false);
+      } else {
+        alert('수정에 실패했습니다.');
+      }
+    } catch (e) {
+      console.error('게시글 수정 오류:', e);
+      alert('수정 중 오류가 발생했습니다.');
+    }
+  };
+
   // 게시글 삭제 함수 ----------------------------------------------
   const deletePost = () => {
     axios
@@ -56,6 +94,15 @@ export default function BoardDetail (props:any) {
               >
                 <p>목록</p>
               </div>
+              {
+                (isLogin && userData.authInstitution === ID) &&
+                <div className='postBtnbox'
+                  style={{marginRight:'10px'}}
+                  onClick={startEdit}
+                >
+                  <p>수정</p>
+                </div>
+              }
               {
                 (isLogin && userData.authInstitution === ID) &&
                 <div className='postBtnbox'
@@ -101,9 +148,40 @@ export default function BoardDetail (props:any) {
                 })
               }
               </div>
-              <div className='textcover'>
-                <p>{propsData.content}</p>
-              </div>
+              {isEditing ? (
+                <div className='addPostBox' style={{ width:'100%' }}>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'end'}}>
+                    <p>제목</p>
+                    <h5 style={{fontSize:'12px'}}>* 최대 200자</h5>
+                  </div>
+                  <input
+                    className='inputdefault'
+                    value={editTitle}
+                    maxLength={200}
+                    onChange={(e)=>setEditTitle(e.target.value)}
+                    placeholder='제목'
+                  />
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'end', marginTop:'20px'}}>
+                    <p>본문</p>
+                    <h5 style={{fontSize:'12px'}}>* 최대 2000자</h5>
+                  </div>
+                  <textarea
+                    className='textarea textareapost'
+                    value={editContent}
+                    maxLength={2000}
+                    onChange={(e)=>setEditContent(e.target.value)}
+                    placeholder='내용'
+                  />
+                  <div className='buttonbox' style={{ marginTop: 16 }}>
+                    <div className='button' onClick={cancelEdit}><p>취소</p></div>
+                    <div className='button' onClick={saveEdit}><p>저장</p></div>
+                  </div>
+                </div>
+              ) : (
+                <div className='textcover'>
+                  <p>{propsData.content}</p>
+                </div>
+              )}
 
             </div>
 

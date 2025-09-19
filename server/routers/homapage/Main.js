@@ -10,6 +10,20 @@ router.use(bodyParser.urlencoded({extended:true}));
 const multer  = require('multer')
 var fs = require("fs");
 
+// 강제 CORS 헤더 (프리플라이트 포함)
+router.use((req, res, next) => {
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Vary', 'Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 const escapeQuotes = (str) => {
   if (!str) return '';
   return str.replaceAll('è', '\è').replaceAll("'", "\\\'").replaceAll('"', '\\\"').replaceAll('\\n', '\\\\n');
@@ -135,7 +149,11 @@ const noticeStorage = multer.diskStorage({
 
 const galleryStorage = multer.diskStorage({
   destination(req, file, done) { 
-    done(null, 'build/images/gallery');
+    const dir = 'build/images/gallery';
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    done(null, dir);
   }, 
   filename(req, file, done) {
     done(null, file.originalname);
@@ -222,8 +240,19 @@ router.get('/getgallery', async (req, res) => {
   });
 });
 
+
+// 갤러리 업로드 전용 미들웨어
+const conditionalGalleryUpload = (req, res, next) => {
+  if (req.query.galleryImage) {
+    uploadGallery.array('img')(req, res, next);
+  } else {
+    next();
+  }
+};
+
+
 // 갤러리 업데이트 (images 전체 교체)
-router.post('/gallery/update', async (req, res) => {
+router.post('/gallery/update', conditionalGalleryUpload, async (req, res) => {
   const { id, images } = req.body; // images: JSON string
   try {
     const query = `UPDATE gallery SET images = ? WHERE id = ?`;
@@ -238,6 +267,133 @@ router.post('/gallery/update', async (req, res) => {
       }
     });
   } catch (error) {
+    res.send(false);
+    res.end();
+  }
+});
+
+// 갤러리 단일 항목 업데이트/삭제
+router.post('/gallery/updateitem', conditionalGalleryUpload, async (req, res) => {
+  const { id, index, image, subtitle, date, action } = req.body;
+  const indexNum = Number(index);
+
+  try {
+    const getQuery = `SELECT images FROM gallery WHERE id = ?`;
+    db.query(getQuery, [id], function (error, result) {
+      if (error) {
+        console.error('갤러리 데이터 조회 오류:', error);
+        res.send(false);
+        res.end();
+        return;
+      }
+      if (result.length === 0) {
+        res.send(false);
+        res.end();
+        return;
+      }
+      try {
+        const list = JSON.parse(result[0].images || '[]');
+        if (action === 'delete') {
+          if (!Number.isNaN(indexNum) && indexNum >= 0 && indexNum < list.length) {
+            const oldImage = list[indexNum]?.image;
+            list.splice(indexNum, 1);
+            // 파일 삭제 시도
+            if (oldImage) {
+              const filePath = `./build/images/gallery/${oldImage}`;
+              if (fs.existsSync(filePath)) {
+                fs.unlink(filePath, (err) => {
+                  if (err) console.error('갤러리 파일 삭제 오류:', err);
+                });
+              }
+            }
+          }
+        } else if (action === 'clearImage') {
+          if (!Number.isNaN(indexNum) && indexNum >= 0 && indexNum < list.length) {
+            const oldImage = list[indexNum]?.image;
+            if (oldImage) {
+              const filePath = `./build/images/gallery/${oldImage}`;
+              if (fs.existsSync(filePath)) {
+                fs.unlink(filePath, (err) => {
+                  if (err) console.error('갤러리 파일 삭제 오류:', err);
+                });
+              }
+            }
+            // 이미지 필드만 비우고 항목은 유지
+            list[indexNum] = { ...list[indexNum], image: '' };
+          }
+        } else {
+          if (!Number.isNaN(indexNum) && indexNum >= 0 && indexNum < list.length) {
+            const oldImage = list[indexNum]?.image;
+            list[indexNum] = { image: image || oldImage || '', subtitle: subtitle || '', date: date || '' };
+            // 교체된 경우 이전 파일 삭제
+            if (image && oldImage && image !== oldImage) {
+              const filePath = `./build/images/gallery/${oldImage}`;
+              if (fs.existsSync(filePath)) {
+                fs.unlink(filePath, (err) => {
+                  if (err) console.error('갤러리 파일 삭제 오류:', err);
+                });
+              }
+            }
+          } else {
+            list.push({ image: image || '', subtitle: subtitle || '', date: date || '' });
+          }
+        }
+
+        const updateQuery = `UPDATE gallery SET images = ? WHERE id = ?`;
+        const updated = JSON.stringify(list);
+        db.query(updateQuery, [updated, id], function (updateError, updateResult) {
+          if (updateError) {
+            console.error('갤러리 항목 업데이트 오류:', updateError);
+            res.send(false);
+            res.end();
+            return;
+          }
+          if (updateResult.affectedRows > 0) {
+            res.send(true);
+            res.end();
+          } else {
+            res.send(false);
+            res.end();
+          }
+        });
+      } catch (parseError) {
+        console.error('JSON 파싱 오류:', parseError);
+        res.send(false);
+        res.end();
+      }
+    });
+  } catch (error) {
+    console.error('갤러리 항목 업데이트 오류:', error);
+    res.send(false);
+    res.end();
+  }
+});
+
+// 갤러리 이미지 단일 파일 삭제
+router.post('/gallery/deleteimage', async (req, res) => {
+  const { filename } = req.body;
+  if (!filename) {
+    res.send(false);
+    return res.end();
+  }
+  try {
+    const filePath = `./build/images/gallery/${filename}`;
+    if (fs.existsSync(filePath)) {
+      fs.unlink(filePath, (err) => {
+        if (err) {
+          console.error('갤러리 파일 삭제 오류:', err);
+          res.send(false);
+        } else {
+          res.send(true);
+        }
+        res.end();
+      });
+    } else {
+      res.send(false);
+      res.end();
+    }
+  } catch (e) {
+    console.error('갤러리 파일 삭제 처리 오류:', e);
     res.send(false);
     res.end();
   }
@@ -306,17 +462,16 @@ router.get('/getpractice', async (req, res) => {
 
 // 실습/후원 업데이트
 router.post('/practice/update', async (req, res) => {
-  const { id, title, contentSort, content, date } = req.body;
+  const { id, title, contentSort, content } = req.body;
   try {
     const query = `
       UPDATE practice SET
         title = ?,
         contentSort = ?,
-        content = ?,
-        date = ?
+        content = ?
       WHERE id = ?
     `;
-    const params = [title, contentSort, content, date, id];
+    const params = [title, contentSort, content, id];
     db.query(query, params, function (error, result) {
       if (error) { throw error }
       if (result.affectedRows > 0) {
@@ -333,9 +488,34 @@ router.post('/practice/update', async (req, res) => {
   }
 });
 
+
+
+
+// 게시글 사진 파일 저장 미들웨어
+const storage = multer.diskStorage({
+  destination(req, file, done) { 
+    done(null, 'build/images/notice');
+  }, 
+  filename(req, file, done) {
+    done(null, file.originalname);
+  }
+});
+
+const upload_default = multer({ storage });
+
+// 이미지 업로드 미들웨어를 조건부로 실행 (현재 사용하지 않음)
+const conditionalUpload = (req, res, next) => {
+  if (req.query.postImage) {
+    upload_default.array('img')(req, res, next);
+  } else {
+    next();
+  }
+};
+
 // 개별 서비스 항목 업데이트
-router.post('/updateserviceitem', async (req, res) => {
+router.post('/updateserviceitem', conditionalUpload, async (req, res) => {
   const { id, title, content, image, index, action } = req.body;
+  const indexNum = Number(index);
   
   try {
     // 먼저 현재 mainService 데이터를 가져옴
@@ -360,23 +540,29 @@ router.post('/updateserviceitem', async (req, res) => {
         
         if (action === 'delete') {
           // 삭제 액션
-          if (index >= 0 && index < mainServiceList.length) {
-            mainServiceList.splice(index, 1);
+          if (!Number.isNaN(indexNum) && indexNum >= 0 && indexNum < mainServiceList.length) {
+            mainServiceList.splice(indexNum, 1);
           }
         } else {
           // 업데이트 또는 추가 액션
-          if (index >= 0 && index < mainServiceList.length) {
+          const normalizedContent = Array.isArray(content)
+            ? content
+            : (typeof content === 'string'
+                ? (() => { try { const p = JSON.parse(content); return Array.isArray(p) ? p : []; } catch { return []; } })()
+                : []);
+
+          if (!Number.isNaN(indexNum) && indexNum >= 0 && indexNum < mainServiceList.length) {
             // 기존 항목 업데이트
-            mainServiceList[index] = {
+            mainServiceList[indexNum] = {
               title: title || '',
-              content: content || [],
+              content: normalizedContent,
               image: image || ''
             };
           } else {
             // 새 항목 추가
             mainServiceList.push({
               title: title || '',
-              content: content || [],
+              content: normalizedContent,
               image: image || ''
             });
           }
@@ -410,6 +596,81 @@ router.post('/updateserviceitem', async (req, res) => {
     });
   } catch (error) {
     console.error('서비스 항목 업데이트 오류:', error);
+    res.send(false);
+    res.end();
+  }
+});
+
+
+
+// 개별 시설 항목 업데이트
+router.post('/updatefacilityitem', conditionalUpload, async (req, res) => {
+  const { id, title, image, index, action } = req.body;
+  const indexNum = Number(index);
+
+  try {
+    const getQuery = `SELECT facility FROM mainInfo WHERE id = ?`;
+    db.query(getQuery, [id], function (error, result) {
+      if (error) {
+        console.error('시설 데이터 조회 오류:', error);
+        res.send(false);
+        res.end();
+        return;
+      }
+
+      if (result.length === 0) {
+        res.send(false);
+        res.end();
+        return;
+      }
+
+      try {
+        const facilityList = JSON.parse(result[0].facility || '[]');
+
+        if (action === 'delete') {
+          if (!Number.isNaN(indexNum) && indexNum >= 0 && indexNum < facilityList.length) {
+            facilityList.splice(indexNum, 1);
+          }
+        } else {
+          if (!Number.isNaN(indexNum) && indexNum >= 0 && indexNum < facilityList.length) {
+            facilityList[indexNum] = {
+              title: title || '',
+              image: image || ''
+            };
+          } else {
+            facilityList.push({
+              title: title || '',
+              image: image || ''
+            });
+          }
+        }
+
+        const updateQuery = `UPDATE mainInfo SET facility = ? WHERE id = ?`;
+        const updatedFacility = JSON.stringify(facilityList);
+        db.query(updateQuery, [updatedFacility, id], function (updateError, updateResult) {
+          if (updateError) {
+            console.error('시설 항목 업데이트 오류:', updateError);
+            res.send(false);
+            res.end();
+            return;
+          }
+
+          if (updateResult.affectedRows > 0) {
+            res.send(true);
+            res.end();
+          } else {
+            res.send(false);
+            res.end();
+          }
+        });
+      } catch (parseError) {
+        console.error('JSON 파싱 오류:', parseError);
+        res.send(false);
+        res.end();
+      }
+    });
+  } catch (error) {
+    console.error('시설 항목 업데이트 오류:', error);
     res.send(false);
     res.end();
   }

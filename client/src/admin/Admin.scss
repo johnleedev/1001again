@@ -74,9 +74,12 @@
   justify-content: center;
 }
 .amdin_Main_Box {
+  width: 150px;
+  height: 30px;
+  @include middle();
   background: #2c3d54;
   color: #fff;
-  padding: 20px;
+  padding: 10px;
   border-radius: 8px;
 }
 .amdin_Main_Box:hover {

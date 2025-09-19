@@ -103,7 +103,22 @@ export default function EditPractice() {
     setSelected(row);
     setContentSort(row.contentSort);
     if (row.contentSort === 'text') {
-      try { setTextContent(JSON.parse(row.content || '[]')); } catch { setTextContent([]); }
+      // 섹션 구조 [{ title, content: [] }] 유지. 만약 라인 배열이면 무제목 섹션으로 변환
+      try {
+        const parsed = JSON.parse(row.content || '[]');
+        if (Array.isArray(parsed)) {
+          if (parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0] !== null && 'content' in parsed[0]) {
+            setTextContent(parsed as any[]);
+          } else {
+            const lines = (parsed as any[]).filter((x) => typeof x === 'string');
+            setTextContent([{ title: '', content: lines }] as any[]);
+          }
+        } else {
+          setTextContent([]);
+        }
+      } catch {
+        setTextContent([]);
+      }
       setImageFilename('');
     } else {
       setTextContent([]);
@@ -148,8 +163,7 @@ export default function EditPractice() {
       id: selected.id,
       title: selected.title,
       contentSort,
-      content: contentSort === 'text' ? JSON.stringify(textContent) : imageFilename,
-      date: selected.date
+      content: contentSort === 'text' ? JSON.stringify(textContent) : imageFilename
     };
     const res = await axios.post(`${MainURL}/main/practice/update`, payload);
     if (res.data === true) {
@@ -160,13 +174,15 @@ export default function EditPractice() {
     }
   };
 
+  // 섹션 제목 수정
   const updateTextSectionTitle = (index: number, value: string) => {
-    const copy = textContent.map((it, i) => i === index ? { ...it, title: value } : it);
+    const copy = (textContent || []).map((sec: any, i: number) => i === index ? { ...sec, title: value } : sec);
     setTextContent(copy);
   };
-  
+
+  // 섹션 내 항목 수정
   const updateTextSectionItem = (sectionIndex: number, itemIndex: number, value: string) => {
-    const copy = textContent.map((sec, i) => {
+    const copy = (textContent || []).map((sec: any, i: number) => {
       if (i !== sectionIndex) return sec;
       const content = (sec.content || []).map((c: string, ci: number) => ci === itemIndex ? value : c);
       return { ...sec, content };
@@ -180,7 +196,7 @@ export default function EditPractice() {
         <h3 style={{ marginBottom: 12, textAlign: 'center' }}>후원/실습 수정</h3>
         <div>
           <div style={{ marginBottom: 24 }}>
-            <h4>후원/실습 목록</h4>
+            <h4 style={{marginBottom: '15px'}}>후원/실습 목록</h4>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {rows.map((r) => (
                 <div key={r.id} className='amdin_Main_Box' onClick={()=>selectRow(r)} style={{ marginBottom: 8, minWidth: '120px', textAlign: 'center' }}>
@@ -212,125 +228,100 @@ export default function EditPractice() {
                 </select>
               </div>
 
-                              {contentSort === 'text' ? (
-                  <div>
-                    <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <h5 style={{ margin: 0, color: '#333' }}>📝 텍스트 컨텐츠 편집</h5>
+            {contentSort === 'text' ? (
+              <div>
+                <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h5 style={{ margin: 0, color: '#333' }}>📝 텍스트 컨텐츠 편집</h5>
+                  <div 
+                    className='adminBtn' 
+                    style={{ fontSize: '12px', padding: '4px 8px', backgroundColor: '#4CAF50', color: 'white', display: 'inline-flex', width: 'auto' }}
+                    onClick={() => setTextContent([ ...(textContent || []), { title: '', content: [''] } ])}
+                  >
+                    + 새 섹션 추가
+                  </div>
+                </div>
+                {(textContent || []).map((sec: any, si: number) => (
+                  <div key={si} className='adminRepeatCard' style={{ border: '1px solid #e0e0e0', borderRadius: 8, padding: 16, marginBottom: 16, backgroundColor: '#fafafa' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <div style={{ fontWeight: 'bold', color: '#555' }}>📋 섹션 {si + 1}</div>
                       <div 
-                        className='adminBtn' 
-                        style={{ 
-                          fontSize: '12px', 
-                          padding: '4px 8px', 
-                          backgroundColor: '#4CAF50',
-                          color: 'white'
-                        }}
                         onClick={() => {
-                          const newSection = { title: '', content: [''] };
-                          setTextContent([...textContent, newSection]);
+                          if (window.confirm('이 섹션을 삭제하시겠습니까?')) {
+                            const copy = (textContent || []).filter((_: any, i: number) => i !== si);
+                            setTextContent(copy);
+                          }
                         }}
+                        style={{ cursor: 'pointer', color: '#ff4444', fontSize: 14 }}
                       >
-                        + 새 섹션 추가
+                        🗑️
                       </div>
                     </div>
-                    {textContent.map((sec: any, si: number) => (
-                      <div key={si} className='adminRepeatCard' style={{ 
-                        border: '1px solid #e0e0e0', 
-                        borderRadius: '8px', 
-                        padding: '16px', 
-                        marginBottom: '16px',
-                        backgroundColor: '#fafafa'
-                      }}>
-                        <div style={{ 
-                          display: 'flex', 
-                          justifyContent: 'space-between', 
-                          alignItems: 'center', 
-                          marginBottom: '12px' 
-                        }}>
-                          <div style={{ fontWeight: 'bold', color: '#555' }}>📋 섹션 {si + 1}</div>
+
+                    <div style={{ marginBottom: 12 }}>
+                      <label style={{ display: 'block', marginBottom: 4, color: '#666' }}>섹션 제목</label>
+                      <input 
+                        className='inputdefault' 
+                        value={sec.title || ''} 
+                        onChange={(e)=> updateTextSectionTitle(si, e.target.value)}
+                        placeholder="섹션 제목을 입력하세요"
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', marginBottom: 8, color: '#666' }}>항목들</label>
+                      {(sec.content || []).map((item: string, ii: number) => (
+                        <div key={ii} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <input 
+                            className='inputdefault' 
+                            value={item} 
+                            onChange={(e)=> updateTextSectionItem(si, ii, e.target.value)}
+                            placeholder={`항목 ${ii + 1}을 입력하세요`}
+                            style={{ flex: 1 }}
+                          />
                           <div 
                             onClick={() => {
-                              if (window.confirm('이 섹션을 삭제하시겠습니까?')) {
-                                const copy = textContent.filter((_, i) => i !== si);
+                              if (window.confirm('이 항목을 삭제하시겠습니까?')) {
+                                const copy = (textContent || []).map((s: any, i: number) => {
+                                  if (i === si) {
+                                    const newContent = (s.content || []).filter((_: string, ci: number) => ci !== ii);
+                                    return { ...s, content: newContent };
+                                  }
+                                  return s;
+                                });
                                 setTextContent(copy);
                               }
                             }}
-                            style={{ cursor: 'pointer', color: '#ff4444', fontSize: '14px' }}
+                            style={{ cursor: 'pointer', color: '#ff4444', fontSize: 16 }}
                           >
                             🗑️
                           </div>
                         </div>
-                        <div style={{ marginBottom: '12px' }}>
-                          <label style={{ display: 'block', marginBottom: '4px', color: '#666' }}>섹션 제목</label>
-                          <input 
-                            className='inputdefault' 
-                            value={sec.title || ''} 
-                            onChange={(e)=>updateTextSectionTitle(si, e.target.value)}
-                            placeholder="섹션 제목을 입력하세요"
-                            style={{ width: '100%' }}
-                          />
-                        </div>
-                        <div>
-                          <label style={{ display: 'block', marginBottom: '8px', color: '#666' }}>항목들</label>
-                          {(sec.content || []).map((item: string, ii: number) => (
-                            <div key={ii} style={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: '8px', 
-                              marginBottom: '8px' 
-                            }}>
-                              <input 
-                                key={ii} 
-                                className='inputdefault' 
-                                value={item} 
-                                onChange={(e)=>updateTextSectionItem(si, ii, e.target.value)}
-                                placeholder={`항목 ${ii + 1}을 입력하세요`}
-                                style={{ flex: 1 }}
-                              />
-                              <div 
-                                                                 onClick={() => {
-                                   if (window.confirm('이 항목을 삭제하시겠습니까?')) {
-                                     const copy = textContent.map((s, i) => {
-                                       if (i === si) {
-                                         const newContent = (s.content || []).filter((_: string, ci: number) => ci !== ii);
-                                         return { ...s, content: newContent };
-                                       }
-                                       return s;
-                                     });
-                                     setTextContent(copy);
-                                   }
-                                 }}
-                                style={{ cursor: 'pointer', color: '#ff4444', fontSize: '16px' }}
-                              >
-                                🗑️
-                              </div>
-                            </div>
-                          ))}
-                          <div 
-                            className='adminBtn' 
-                            style={{ 
-                              fontSize: '12px', 
-                              padding: '4px 8px', 
-                              backgroundColor: '#2196F3',
-                              color: 'white',
-                              marginTop: '8px'
-                            }}
-                            onClick={() => {
-                              const copy = textContent.map((s, i) => {
-                                if (i === si) {
-                                  return { ...s, content: [...(s.content || []), ''] };
-                                }
-                                return s;
-                              });
-                              setTextContent(copy);
-                            }}
-                          >
-                            + 항목 추가
-                          </div>
-                        </div>
+                      ))}
+                      <div 
+                        className='adminBtn' 
+                        style={{ fontSize: '12px', padding: '4px 8px', backgroundColor: '#2196F3', color: 'white', marginTop: 8, display: 'inline-flex', width: 'auto' }}
+                        onClick={() => {
+                          const copy = (textContent || []).map((s: any, i: number) => i === si ? { ...s, content: [ ...(s.content || []), '' ] } : s);
+                          setTextContent(copy);
+                        }}
+                      >
+                        + 항목 추가
                       </div>
-                    ))}
+                    </div>
                   </div>
-                              ) : (
+                ))}
+                <div style={{ display:'flex', justifyContent:'flex-end' }}>
+                  <div 
+                    className='adminBtn' 
+                    style={{ fontSize: '12px', padding: '4px 8px', backgroundColor: '#4CAF50', color: 'white', display: 'inline-flex', width: 'auto' }}
+                    onClick={() => setTextContent([ ...(textContent || []), { title: '', content: [''] } ])}
+                  >
+                    + 새 섹션 추가
+                  </div>
+                </div>
+              </div>
+            ) : (
                   <div>
                     <div style={{ marginBottom: 16 }}>
                       <h5 style={{ margin: 0, color: '#333' }}>🖼️ 이미지 컨텐츠 편집</h5>
@@ -347,8 +338,8 @@ export default function EditPractice() {
                           <div {...imageDropzone.getRootProps()} className="imageDropzoneStyle">
                             <input {...imageDropzone.getInputProps()} />
                             {imageFiles.length > 0 
-                              ? <div className='imageplus' style={{backgroundColor:'#fff', color:'#333', border:'1px solid #ccc', padding:'8px 12px', borderRadius:'4px', cursor:'pointer', fontSize:'12px'}}>+ 다시첨부하기</div>
-                              : <div className='imageplus' style={{backgroundColor:'#fff', color:'#333', border:'1px solid #ccc', padding:'8px 12px', borderRadius:'4px', cursor:'pointer', fontSize:'12px'}}>+ 이미지첨부하기</div>
+                              ? <div className='imageplus' style={{backgroundColor:'#fff', color:'#333', border:'1px solid #ccc', padding:'8px 12px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', display:'inline-flex', width:'auto'}}>+ 다시첨부하기</div>
+                              : <div className='imageplus' style={{backgroundColor:'#fff', color:'#333', border:'1px solid #ccc', padding:'8px 12px', borderRadius:'4px', cursor:'pointer', fontSize:'12px', display:'inline-flex', width:'auto'}}>+ 이미지첨부하기</div>
                             }
                           </div>
                         </div>

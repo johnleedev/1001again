@@ -169,6 +169,35 @@ router.post('/deletepost', async (req, res) => {
  
 });
 
+// 게시글 업데이트
+router.post('/updatepost', async (req, res) => {
+  const { id, title, content } = req.body;
+  try {
+    const titleCopy = escapeQuotes(title || '');
+    const contentCopy = escapeQuotes(content || '');
+    const query = `
+      UPDATE board SET
+        title = ?,
+        content = ?
+      WHERE id = ?
+    `;
+    const params = [titleCopy, contentCopy, id];
+    db.query(query, params, function (error, result) {
+      if (error) { throw error }
+      if (result.affectedRows > 0) {
+        res.send(true);
+        res.end();
+      } else {
+        res.send(false);
+        res.end();
+      }
+    });
+  } catch (error) {
+    res.send(false);
+    res.end();
+  }
+});
+
 
 
 
