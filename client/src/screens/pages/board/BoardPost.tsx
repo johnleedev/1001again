@@ -75,7 +75,7 @@ export default function Post () {
   };
 
   // 글쓰기 등록 함수 ----------------------------------------------
-  const datecopy = format(currentDate, "yyyy-MM-dd'T'HH:mm:ss");
+  const datecopy = format(currentDate, "yyyy-MM-dd");
   const registerPost = async () => {
     const formData = new FormData();
     imageFiles.forEach((file, index) => {

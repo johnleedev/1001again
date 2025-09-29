@@ -34,6 +34,11 @@ const Header: React.FC = () => {
         {title:"실습안내", subUrl:"/pratice"}, 
       ]
     },
+    { title: "재활사업단", url:"/rehabilitate",
+      links: [
+        {title:"소개", subUrl:"/rehabilitate"}, 
+      ]
+    },
     { title: "게시판", url:"/board", links: [
       {title:"공지사항", subUrl:"/board"}, 
       {title:"문의/고충처리", subUrl:"/question"}

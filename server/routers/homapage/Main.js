@@ -679,4 +679,25 @@ router.post('/updatefacilityitem', conditionalUpload, async (req, res) => {
 
 
 
+// 메인 데이터
+router.get('/getrehabilitate', async (req, res) => {
+  var { id } = req.body;
+  const query = `
+    SELECT * FROM rehabilitate;
+  `;
+  db.query(query, function (error, result) {
+    if (error) {
+      throw error;
+    }
+    if (result.length > 0) {
+      res.json(result);
+    } else {
+      res.send(false);
+    }
+    res.end();
+  });
+});
+
+
+
 module.exports = router;

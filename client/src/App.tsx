@@ -20,6 +20,7 @@ import AdminMain from './admin/AdminMain';
 import Question from './screens/pages/question/Question';
 import QuestionPost from './screens/pages/question/QuestionPost';
 import QuestionDetail from './screens/pages/question/QuestionDetail';
+import RehabilitateNotice from './screens/pages/rehabilitate/RehabilitateNotice';
 
 function App() {
 
@@ -50,6 +51,8 @@ function App() {
               <Route path="/question" element={<Question/>}/>
               <Route path="/questionpost" element={<QuestionPost/>}/>
               <Route path="/questiondetail" element={<QuestionDetail/>}/>
+
+              <Route path="/rehabilitate" element={<RehabilitateNotice/>}/>
 
               <Route path="/admin/*" element={<AdminMain/>}/>
             </Routes>

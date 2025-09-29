@@ -23,11 +23,13 @@ export default function BoardDetail (props:any) {
 
   // 편집 상태
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [editDate, setEditDate] = useState<string>(propsData?.date || '');
   const [editTitle, setEditTitle] = useState<string>(propsData?.title || '');
   const [editContent, setEditContent] = useState<string>(propsData?.content || '');
 
   const startEdit = () => {
     setEditTitle(propsData?.title || '');
+    setEditDate(propsData?.date || '');
     setEditContent(propsData?.content || '');
     setIsEditing(true);
   };
@@ -150,6 +152,16 @@ export default function BoardDetail (props:any) {
               </div>
               {isEditing ? (
                 <div className='addPostBox' style={{ width:'100%' }}>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'end'}}>
+                    <p>날짜</p>
+                  </div>
+                  <input
+                    className='inputdefault'
+                    value={editDate}
+                    maxLength={200}
+                    onChange={(e)=>setEditDate(e.target.value)}
+                    placeholder='제목'
+                  />
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'end'}}>
                     <p>제목</p>
                     <h5 style={{fontSize:'12px'}}>* 최대 200자</h5>
