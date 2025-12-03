@@ -35,6 +35,16 @@ export default function EditPractice() {
   const currentDate = new Date();
   const date = format(currentDate, 'yyyy-MM-dd');
   
+  // 임의의 영문+숫자 문자열 생성 함수
+  const generateRandomString = (length: number): string => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  };
+
   // 이미지 압축 및 파일명 생성 함수
   const processImageFiles = async (acceptedFiles: File[]) => {
     try {
@@ -50,12 +60,10 @@ export default function EditPractice() {
         })
       );
       
-      const regexCopy = /[^a-zA-Z0-9!@#$%^&*()\-_=+\[\]{}|;:'",.<>]/g;
       const adminId = 'admin'; // 관리자 ID
       const fileCopies = resizedFiles.map((resizedFile, index) => {
-        const regex = resizedFile.name.replace(regexCopy, '');
-        const regexSlice = regex.slice(-15);
-        return new File([resizedFile], `${date}${adminId}_${regexSlice}`, {
+        const randomString = generateRandomString(10);
+        return new File([resizedFile], `${date}${adminId}_${randomString}`, {
           type: acceptedFiles[index].type,
         });
       });

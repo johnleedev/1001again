@@ -26,6 +26,16 @@ export default function Post () {
   const [imageFiles, setImageFiles] = useState<File[]>([]);
 
 
+  // 임의의 영문+숫자 문자열 생성 함수
+  const generateRandomString = (length: number): string => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  };
+
   // 이미지 첨부 함수 ----------------------------------------------
   const currentDate = new Date();
   const date = format(currentDate, 'yyyy-MM-dd');
@@ -43,20 +53,17 @@ export default function Post () {
           return resizingBlob;
         })
       );
-      const regexCopy = /[^a-zA-Z0-9!@#$%^&*()\-_=+\[\]{}|;:'",.<>]/g;
       const userIdCopy = userData?.userAccount.slice(0,5);
       const fileCopies = resizedFiles.map((resizedFile, index) => {
-        const regex = resizedFile.name.replace(regexCopy, '');
-        const regexSlice = regex.slice(-15);
-        return new File([resizedFile], `${date}${userIdCopy}_${regexSlice}`, {
+        const randomString = generateRandomString(10);
+        return new File([resizedFile], `${date}${userIdCopy}_${randomString}`, {
           type: acceptedFiles[index].type,
         });
       });
       setImageFiles(fileCopies);
       const imageNames = acceptedFiles.map((file, index) => {
-        const regex = file.name.replace(regexCopy, '');
-        const regexSlice = regex.slice(-15);
-        return `${date}${userIdCopy}_${regexSlice}`;
+        const randomString = generateRandomString(10);
+        return `${date}${userIdCopy}_${randomString}`;
       });
       setInputImages(imageNames);
       setImageLoading(false);
