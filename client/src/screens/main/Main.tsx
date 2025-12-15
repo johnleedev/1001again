@@ -55,30 +55,36 @@ export default function Main(props:any) {
     fetchDatas();
   }, []);
 
-  interface GalleryProps {
+  interface GalleryItem {
     subtitle : string, 
     date : string;
-    images : string[];
+    image : string;
   }
  
 
-  const [program, setProgram] = useState<GalleryProps[]>([]);
-  const [support, setSupport] = useState<GalleryProps[]>([]);
+  const [program, setProgram] = useState<GalleryItem[]>([]);
+  const [support, setSupport] = useState<GalleryItem[]>([]);
 
   // 게시글 가져오기
   const fetchPosts = async () => {
-    const res = await axios.get(`${MainURL}/main/getgallery`)
-    if (res.data) {
-      const copy = [...res.data]
-      const result = copy.map((item:any) => ({
-        ...item,
-        images: JSON.parse(item.images)
-      }));
-      const programCopy = result.filter((e:any)=> e.title === '프로그램');
-      const supportCopy = result.filter((e:any)=> e.title === '후원물품');
-      setProgram(programCopy[0].images);
-      setSupport(supportCopy[0].images);
-    } 
+    try {
+      const progRes = await axios.get(`${MainURL}/main/getgalleryprogram`);
+      if (progRes.data && Array.isArray(progRes.data)) {
+        setProgram(progRes.data);
+      } else {
+        setProgram([]);
+      }
+      const supRes = await axios.get(`${MainURL}/main/getgallerysupport`);
+      if (supRes.data && Array.isArray(supRes.data)) {
+        setSupport(supRes.data);
+      } else {
+        setSupport([]);
+      }
+    } catch (e) {
+      console.error('메인 갤러리 로드 오류:', e);
+      setProgram([]);
+      setSupport([]);
+    }
   };
 
   useEffect(() => {

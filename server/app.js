@@ -17,6 +17,8 @@ const MainRouter = require('./routers/homapage/Main');
 const BoardRouter = require('./routers/homapage/Board');
 app.use('/main', MainRouter);
 app.use('/board', BoardRouter);
+const BackupRouter = require('./routers/homapage/Backup');
+app.use('/backup', BackupRouter);
 
 
 

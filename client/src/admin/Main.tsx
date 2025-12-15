@@ -21,6 +21,8 @@ export default function Main( props: any) {
           후원/실습 수정
         </div>
       </div>
+
+      
         
 
       {/* footer */}

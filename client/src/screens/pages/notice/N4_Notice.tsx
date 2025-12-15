@@ -41,12 +41,17 @@ export default function N4_Notice(props:any) {
   const [facilityData, setFacilityData] = useState<{title:string, image:string}[]>([]);
 
   const fetchPosts = async () => {
-    const res = await axios.get(`${MainURL}/main/getmaininfo`)
+    const res = await axios.get(`${MainURL}/main/getmaininfo`);
     if (res.data) {
-      const copy = {...res.data[0]}
+      const copy = {...res.data[0]};
       setMainData(copy);
-      setFacilityData(JSON.parse(copy.facility));
-    } 
+    }
+    const resFacility = await axios.get(`${MainURL}/main/getmainfacilityimage`);
+    if (resFacility.data && Array.isArray(resFacility.data)) {
+      setFacilityData(resFacility.data);
+    } else {
+      setFacilityData([]);
+    }
   };
 
   useEffect(() => {

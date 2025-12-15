@@ -7,14 +7,26 @@ import { motion } from "framer-motion";
 
 export default function N3_Service(props:any) {
 
-  const [mainServiceData, setMainServiceData] = useState<{title:string, content:string, image:string}[]>([]);
+  const [mainServiceData, setMainServiceData] = useState<{title:string, content:string[], image:string}[]>([]);
 
   const fetchPosts = async () => {
-    const res = await axios.get(`${MainURL}/main/getmaininfo`)
-    if (res.data) {
-      const copy = {...res.data[0]}
-      setMainServiceData(JSON.parse(copy.mainService));
-    } 
+    const res = await axios.get(`${MainURL}/main/getmainserviceimage`);
+    if (res.data && Array.isArray(res.data)) {
+      // content 필드가 문자열(JSON)일 수 있으므로 파싱
+      const parsed = res.data.map((item:any) => ({
+        ...item,
+        content: (() => {
+          try {
+            return Array.isArray(item.content) ? item.content : JSON.parse(item.content || '[]');
+          } catch {
+            return [];
+          }
+        })()
+      }));
+      setMainServiceData(parsed);
+    } else {
+      setMainServiceData([]);
+    }
   };
 
   useEffect(() => {

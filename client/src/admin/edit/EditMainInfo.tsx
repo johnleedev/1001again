@@ -72,15 +72,22 @@ export default function EditMainInfo() {
     return result;
   };
 
-  // 이미지 압축 및 파일명 생성 함수
+  // 이미지 압축 및 파일명 생성 함수 (jpg/jpeg/png만 허용)
   const processImageFiles = async (acceptedFiles: File[]) => {
     try {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+      const validFiles = acceptedFiles.filter(f => allowedTypes.includes(f.type));
+      if (validFiles.length === 0) {
+        alert('jpg, jpeg, png 형식의 이미지 파일만 업로드할 수 있습니다.');
+        return [];
+      }
+
       const options = {
         maxSizeMB: 1,
         maxWidthOrHeight: 1000
       };
       const resizedFiles = await Promise.all(
-        acceptedFiles.map(async (file) => {
+        validFiles.map(async (file) => {
           setImageLoading(true);
           const resizingBlob = await imageCompression(file, options);
           return resizingBlob;
@@ -90,8 +97,15 @@ export default function EditMainInfo() {
       const adminId = 'admin'; // 관리자 ID
       const fileCopies = resizedFiles.map((resizedFile, index) => {
         const randomString = generateRandomString(10);
-        return new File([resizedFile], `${date}${adminId}_${randomString}`, {
-          type: acceptedFiles[index].type,
+        const originalFile = validFiles[index];
+        const mime = originalFile.type || '';
+        const extension = mime.includes('png')
+          ? '.png'
+          : mime.includes('jpeg') || mime.includes('jpg')
+            ? '.jpg'
+            : '.jpg';
+        return new File([resizedFile], `${date}${adminId}_${randomString}${extension}`, {
+          type: originalFile.type,
         });
       });
       setImageLoading(false);
@@ -210,31 +224,18 @@ export default function EditMainInfo() {
         }
       }
 
-      // 서버에 개별 항목 업데이트 요청
-      const payload = {
-        id: form?.id,
-        title: editingFacility.title,
-        image: imageFilename,
-        index: facilityIndex
-      };
+      // 로컬 상태 업데이트
+      const updatedFacilityList = facilityList.map((item, i) => 
+        i === facilityIndex ? { ...editingFacility, image: imageFilename } : item
+      );
+      setFacilityList(updatedFacilityList);
 
-      const res = await axios.post(`${MainURL}/main/updatefacilityitem`, payload);
-      if (res.data === true) {
-        // 로컬 상태 업데이트
-        const updatedFacilityList = facilityList.map((item, i) => 
-          i === facilityIndex ? { ...editingFacility, image: imageFilename } : item
-        );
-        setFacilityList(updatedFacilityList);
+      // 수정 모드 종료
+      setEditingFacilityIndex(-1);
+      setEditingFacility(null);
+      setFacilityImageFiles({});
 
-        // 수정 모드 종료
-        setEditingFacilityIndex(-1);
-        setEditingFacility(null);
-        setFacilityImageFiles({});
-
-        alert('시설 항목이 저장되었습니다.');
-      } else {
-        alert('저장에 실패했습니다.');
-      }
+      alert('시설 항목이 저장되었습니다. (저장 버튼을 눌러 전체 반영)');
     } catch (error) {
       console.error('시설 항목 저장 오류:', error);
       alert('저장 중 오류가 발생했습니다.');
@@ -254,32 +255,18 @@ export default function EditMainInfo() {
         }
       }
 
-      // 서버에 개별 항목 업데이트 요청
-      const payload = {
-        id: form?.id,
-        title: editingService.title,
-        content: editingService.content,
-        image: imageFilename,
-        index: serviceIndex
-      };
-
-      const res = await axios.post(`${MainURL}/main/updateserviceitem`, payload);
-      if (res.data === true) {
-        // 로컬 상태 업데이트
-        const updatedServiceList = mainServiceList.map((item, i) => 
-          i === serviceIndex ? { ...editingService, image: imageFilename } : item
-        );
-        setMainServiceList(updatedServiceList);
-        
-        // 수정 모드 종료
-        setEditingServiceIndex(-1);
-        setEditingService(null);
-        setServiceImageFiles({});
-        
-        alert('서비스 항목이 저장되었습니다.');
-      } else {
-        alert('저장에 실패했습니다.');
-      }
+      // 로컬 상태 업데이트
+      const updatedServiceList = mainServiceList.map((item, i) => 
+        i === serviceIndex ? { ...editingService, image: imageFilename } : item
+      );
+      setMainServiceList(updatedServiceList);
+      
+      // 수정 모드 종료
+      setEditingServiceIndex(-1);
+      setEditingService(null);
+      setServiceImageFiles({});
+      
+      alert('서비스 항목이 저장되었습니다. (저장 버튼을 눌러 전체 반영)');
     } catch (error) {
       console.error('서비스 항목 저장 오류:', error);
       alert('저장 중 오류가 발생했습니다.');
@@ -325,8 +312,33 @@ export default function EditMainInfo() {
       setForm(base);
       try { setGreeting(base.greeting ? JSON.parse(base.greeting) : { image: '', fromname: '', content: [''] }); } catch { setGreeting({ image: '', fromname: '', content: [''] }); }
       try { setMainMessageList(base.mainMessage ? JSON.parse(base.mainMessage) : []); } catch { setMainMessageList([]); }
-      try { setMainServiceList(base.mainService ? JSON.parse(base.mainService) : []); } catch { setMainServiceList([]); }
-      try { setFacilityList(base.facility ? JSON.parse(base.facility) : []); } catch { setFacilityList([]); }
+    }
+    // mainServiceImage / mainFacilityImage는 별도 테이블에서 조회
+    try {
+      const svcRes = await axios.get(`${MainURL}/main/getmainserviceimage`);
+      if (svcRes.data && Array.isArray(svcRes.data)) {
+        const parsed = svcRes.data.map((item:any)=> ({
+          ...item,
+          content: (() => { try { return Array.isArray(item.content) ? item.content : JSON.parse(item.content || '[]'); } catch { return []; } })()
+        }));
+        setMainServiceList(parsed);
+      } else {
+        setMainServiceList([]);
+      }
+    } catch (e) {
+      console.error('mainServiceImage 로드 오류:', e);
+      setMainServiceList([]);
+    }
+    try {
+      const facRes = await axios.get(`${MainURL}/main/getmainfacilityimage`);
+      if (facRes.data && Array.isArray(facRes.data)) {
+        setFacilityList(facRes.data);
+      } else {
+        setFacilityList([]);
+      }
+    } catch (e) {
+      console.error('mainFacilityImage 로드 오류:', e);
+      setFacilityList([]);
     }
   };
 
@@ -346,19 +358,36 @@ export default function EditMainInfo() {
 
   const save = async () => {
     if (!form) return;
-    const payload = {
-      ...form,
-      greeting: JSON.stringify(greeting || {}),
-      mainMessage: JSON.stringify(mainMessageList || []),
-      mainService: JSON.stringify(mainServiceList || []),
-      facility: JSON.stringify(facilityList || []),
-    };
-    const res = await axios.post(`${MainURL}/main/updatemaininfo`, payload);
-    if (res.data === true) {
-      alert('저장되었습니다.');
-      navigate('/admin/main');
-    } else {
-      alert('저장에 실패했습니다.');
+    try {
+      // mainServiceImage 저장
+      const svcRes = await axios.post(`${MainURL}/main/mainserviceimage/save`, { items: mainServiceList });
+      if (!svcRes.data || !svcRes.data.success) {
+        alert('서비스 이미지 저장에 실패했습니다.');
+        return;
+      }
+      // mainFacilityImage 저장
+      const facRes = await axios.post(`${MainURL}/main/mainfacilityimage/save`, { items: facilityList });
+      if (!facRes.data || !facRes.data.success) {
+        alert('시설 이미지 저장에 실패했습니다.');
+        return;
+      }
+
+      const payload = {
+        ...form,
+        greeting: JSON.stringify(greeting || {}),
+        mainMessage: JSON.stringify(mainMessageList || []),
+        // mainService / facility는 별도 테이블로 관리
+      };
+      const res = await axios.post(`${MainURL}/main/updatemaininfo`, payload);
+      if (res.data === true) {
+        alert('저장되었습니다.');
+        navigate('/admin/main');
+      } else {
+        alert('저장에 실패했습니다.');
+      }
+    } catch (err:any) {
+      console.error('저장 오류:', err);
+      alert(err.response?.data?.message || '저장 중 오류가 발생했습니다.');
     }
   };
 
@@ -459,39 +488,20 @@ export default function EditMainInfo() {
                         >
                           ✏️ 수정
                         </div>
-                        <div 
-                          className='adminBtn danger' 
-                          style={{ 
-                            padding: '6px 12px', 
-                            fontSize: '12px',
-                            borderRadius: '4px'
-                          }}
-                          onClick={async () => {
-                            if (window.confirm(`<${svc.title}> 서비스 항목을 삭제하시겠습니까? 삭제후에는 되돌릴수 없습니다.`)) {
-                              try {
-                                // 서버에 삭제 요청
-                                const payload = {
-                                  id: form?.id,
-                                  index: si,
-                                  action: 'delete'
-                                };
-                                
-                                const res = await axios.post(`${MainURL}/main/updateserviceitem`, payload);
-                                if (res.data === true) {
-                                  // 로컬 상태에서도 삭제
-                                  const copy = mainServiceList.filter((_:any, i:number)=> i!==si);
-                                  setMainServiceList(copy);
-                                  alert('서비스 항목이 삭제되었습니다.');
-                                } else {
-                                  alert('삭제에 실패했습니다.');
-                                }
-                              } catch (error) {
-                                console.error('서비스 항목 삭제 오류:', error);
-                                alert('삭제 중 오류가 발생했습니다.');
+                          <div 
+                            className='adminBtn danger' 
+                            style={{ 
+                              padding: '6px 12px', 
+                              fontSize: '12px',
+                              borderRadius: '4px'
+                            }}
+                            onClick={() => {
+                              if (window.confirm(`<${svc.title}> 서비스 항목을 삭제하시겠습니까?`)) {
+                                const copy = mainServiceList.filter((_:any, i:number)=> i!==si);
+                                setMainServiceList(copy);
                               }
-                            }
-                          }}
-                        >
+                            }}
+                          >
                           🗑️ 삭제
                         </div>
                       </div>
@@ -720,22 +730,10 @@ export default function EditMainInfo() {
                         <div 
                           className='adminBtn danger'
                           style={{ padding:'6px 12px', fontSize:12, borderRadius:4 }}
-                          onClick={async () => {
-                            if (window.confirm(`<${fc.title || '시설'}> 항목을 삭제하시겠습니까? 삭제후에는 되돌릴 수 없습니다.`)) {
-                              try {
-                                const payload = { id: form?.id, index: fi, action: 'delete' };
-                                const res = await axios.post(`${MainURL}/main/updatefacilityitem`, payload);
-                                if (res.data === true) {
-                                  const copy = facilityList.filter((_:any, i:number)=> i!==fi);
-                                  setFacilityList(copy);
-                                  alert('시설 항목이 삭제되었습니다.');
-                                } else {
-                                  alert('삭제에 실패했습니다.');
-                                }
-                              } catch (error) {
-                                console.error('시설 항목 삭제 오류:', error);
-                                alert('삭제 중 오류가 발생했습니다.');
-                              }
+                          onClick={() => {
+                            if (window.confirm(`<${fc.title || '시설'}> 항목을 삭제하시겠습니까?`)) {
+                              const copy = facilityList.filter((_:any, i:number)=> i!==fi);
+                              setFacilityList(copy);
                             }
                           }}
                         >

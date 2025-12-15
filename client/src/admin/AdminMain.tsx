@@ -6,6 +6,7 @@ import Login from './Login';
 import EditMainInfo from './edit/EditMainInfo';
 import EditGallery from './edit/EditGallery';
 import EditPractice from './edit/EditPractice';
+import Backup from './Backup';
 
 
 export default function AdminMain( props: any) {
@@ -18,6 +19,7 @@ export default function AdminMain( props: any) {
         <Route path="/edit/main-info" element={<EditMainInfo/>}/>
         <Route path="/edit/gallery" element={<EditGallery/>}/>
         <Route path="/edit/support-practice" element={<EditPractice/>}/>
+        <Route path="/backup" element={<Backup/>}/>
       </Routes>
     </div>
   );

@@ -66,8 +66,6 @@ router.post('/updatemaininfo', async (req, res) => {
     mainLogoMini,
     greeting,
     mainMessage,
-    mainService,
-    facility,
     placeNaver,
     placeKakao
   } = req.body;
@@ -89,8 +87,6 @@ router.post('/updatemaininfo', async (req, res) => {
         mainLogoMini = ?,
         greeting = ?,
         mainMessage = ?,
-        mainService = ?,
-        facility = ?,
         placeNaver = ?,
         placeKakao = ?
       WHERE id = ?
@@ -110,8 +106,6 @@ router.post('/updatemaininfo', async (req, res) => {
       mainLogoMini,
       greeting,
       mainMessage,
-      mainService,
-      facility,
       placeNaver,
       placeKakao,
       id
@@ -170,8 +164,29 @@ const mainImageStorage = multer.diskStorage({
 });
 
 const uploadNotice = multer({ storage: noticeStorage });
-const uploadGallery = multer({ storage: galleryStorage });
+const uploadGallery = multer({ 
+  storage: galleryStorage,
+  fileFilter: (req, file, cb) => {
+    const mime = file.mimetype || '';
+    const allowed = ['image/jpeg', 'image/png', 'image/jpg'];
+    if (allowed.includes(mime)) {
+      cb(null, true);
+    } else {
+      console.warn('갤러리 업로드 거부 - 허용되지 않은 MIME 타입:', mime, '파일명:', file.originalname);
+      cb(new Error('INVALID_FILE_TYPE'));
+    }
+  }
+});
 const uploadMainImage = multer({ storage: mainImageStorage });
+
+// 갤러리 업로드 전용 미들웨어 (galleryImage 쿼리로 업로드 허용)
+const conditionalGalleryUpload = (req, res, next) => {
+  if (req.query.galleryImage) {
+    uploadGallery.array('img')(req, res, next);
+  } else {
+    next();
+  }
+};
 
 // 이미지 업로드 엔드포인트
 router.post('/upload/notice', uploadNotice.single('img'), (req, res) => {
@@ -189,20 +204,35 @@ router.post('/upload/notice', uploadNotice.single('img'), (req, res) => {
   }
 });
 
-router.post('/upload/gallery', uploadGallery.array('img'), (req, res) => {
-  if (!req.files || req.files.length === 0) {
-    res.send(false);
-    return res.end();
-  }
-  try {
-    const filenames = req.files.map(f => f.originalname);
-    res.json({ filenames });
-    res.end();
-  } catch (error) {
-    console.error('갤러리 이미지 업로드 오류:', error);
-    res.send(false);
-    res.end();
-  }
+router.post('/upload/gallery', (req, res) => {
+  uploadGallery.array('img')(req, res, (err) => {
+    if (err) {
+      console.error('갤러리 이미지 업로드 오류:', err.message || err);
+      res.status(400).json({ success: false, message: 'jpg, jpeg, png 파일만 업로드 가능합니다.' });
+      return;
+    }
+    if (!req.files || req.files.length === 0) {
+      res.send(false);
+      return res.end();
+    }
+    try {
+      const filenames = req.files.map(f => {
+        const filename = f.originalname;
+        console.log('갤러리 이미지 업로드 - 원본 파일명:', filename);
+        // 확장자 확인
+        if (!filename.includes('.')) {
+          console.warn('경고: 파일명에 확장자가 없습니다:', filename);
+        }
+        return filename;
+      });
+      res.json({ filenames });
+      res.end();
+    } catch (error) {
+      console.error('갤러리 이미지 업로드 오류:', error);
+      res.send(false);
+      res.end();
+    }
+  });
 });
 
 router.post('/upload/mainimage', uploadMainImage.single('img'), (req, res) => {
@@ -220,154 +250,378 @@ router.post('/upload/mainimage', uploadMainImage.single('img'), (req, res) => {
   }
 });
 
+// 메인 서비스 이미지 전체 저장
+router.post('/main/mainserviceimage/save', async (req, res) => {
+  const { items } = req.body;
+  if (!Array.isArray(items)) {
+    res.status(400).json({ success: false, message: 'items 배열이 필요합니다.' });
+    return;
+  }
+  try {
+    await new Promise((resolve) => db.query(`DELETE FROM mainServiceImage`, () => resolve()));
 
-// 갤러리
-router.get('/getgallery', async (req, res) => {
-  
+    let success = 0;
+    const errors = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i] || {};
+      const title = escapeQuotes(it.title || '');
+      const image = escapeQuotes(it.image || '');
+      const content = escapeQuotes(JSON.stringify(it.content || []));
+      const q = `INSERT INTO mainServiceImage (title, image, content) VALUES ('${title}', '${image}', '${content}')`;
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => {
+        db.query(q, function(err) {
+          if (err) {
+            console.error('mainServiceImage INSERT 오류:', err);
+            errors.push({ index: i, error: err.message });
+          } else {
+            success++;
+          }
+          resolve();
+        });
+      });
+    }
+    res.json({ success: true, successCount: success, totalCount: items.length, errors: errors.length ? errors : undefined });
+  } catch (e) {
+    console.error('mainServiceImage 저장 오류:', e);
+    res.status(500).json({ success: false, message: '저장 중 오류가 발생했습니다.', error: e.message });
+  }
+});
+
+// 메인 시설 이미지 전체 저장
+router.post('/main/mainfacilityimage/save', async (req, res) => {
+  const { items } = req.body;
+  if (!Array.isArray(items)) {
+    res.status(400).json({ success: false, message: 'items 배열이 필요합니다.' });
+    return;
+  }
+  try {
+    await new Promise((resolve) => db.query(`DELETE FROM mainFacilityImage`, () => resolve()));
+
+    let success = 0;
+    const errors = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i] || {};
+      const title = escapeQuotes(it.title || '');
+      const image = escapeQuotes(it.image || '');
+      const q = `INSERT INTO mainFacilityImage (title, image) VALUES ('${title}', '${image}')`;
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => {
+        db.query(q, function(err) {
+          if (err) {
+            console.error('mainFacilityImage INSERT 오류:', err);
+            errors.push({ index: i, error: err.message });
+          } else {
+            success++;
+          }
+          resolve();
+        });
+      });
+    }
+    res.json({ success: true, successCount: success, totalCount: items.length, errors: errors.length ? errors : undefined });
+  } catch (e) {
+    console.error('mainFacilityImage 저장 오류:', e);
+    res.status(500).json({ success: false, message: '저장 중 오류가 발생했습니다.', error: e.message });
+  }
+});
+
+
+// 프로그램 갤러리 (galleryProgram 테이블)
+router.get('/getgalleryprogram', async (req, res) => {
   const query = `
-    SELECT * FROM gallery;
+    SELECT * FROM galleryProgram ORDER BY date DESC, id DESC;
   `;
   db.query(query, function (error, result) {
     if (error) {
-      throw error;
+      console.error('프로그램 갤러리 조회 오류:', error);
+      res.send(false);
+      res.end();
+      return;
     }
     if (result.length > 0) {
       res.json(result);
     } else {
-      res.send(false);
+      res.json([]);
     }
     res.end();
   });
 });
 
+// 메인 서비스 이미지 (mainServiceImage 테이블)
+router.get('/getmainserviceimage', async (req, res) => {
+  const query = `
+    SELECT * FROM mainServiceImage;
+  `;
+  db.query(query, function (error, result) {
+    if (error) {
+      console.error('mainServiceImage 조회 오류:', error);
+      res.send(false);
+      res.end();
+      return;
+    }
+    if (result.length > 0) {
+      res.json(result);
+    } else {
+      res.json([]);
+    }
+    res.end();
+  });
+});
 
-// 갤러리 업로드 전용 미들웨어
-const conditionalGalleryUpload = (req, res, next) => {
-  if (req.query.galleryImage) {
-    uploadGallery.array('img')(req, res, next);
-  } else {
-    next();
-  }
-};
+// 시설 이미지 (mainFacilityImage 테이블)
+router.get('/getmainfacilityimage', async (req, res) => {
+  const query = `
+    SELECT * FROM mainFacilityImage;
+  `;
+  db.query(query, function (error, result) {
+    if (error) {
+      console.error('mainFacilityImage 조회 오류:', error);
+      res.send(false);
+      res.end();
+      return;
+    }
+    if (result.length > 0) {
+      res.json(result);
+    } else {
+      res.json([]);
+    }
+    res.end();
+  });
+});
 
+// 후원물품 갤러리 (gallerySupport 테이블)
+router.get('/getgallerysupport', async (req, res) => {
+  const query = `
+    SELECT * FROM gallerySupport ORDER BY date DESC, id DESC;
+  `;
+  db.query(query, function (error, result) {
+    if (error) {
+      console.error('후원물품 갤러리 조회 오류:', error);
+      res.send(false);
+      res.end();
+      return;
+    }
+    if (result.length > 0) {
+      res.json(result);
+    } else {
+      res.json([]);
+    }
+    res.end();
+  });
+});
 
-// 갤러리 업데이트 (images 전체 교체)
-router.post('/gallery/update', conditionalGalleryUpload, async (req, res) => {
-  const { id, images } = req.body; // images: JSON string
+// 프로그램 갤러리 항목 추가
+router.post('/galleryprogram/add', conditionalGalleryUpload, async (req, res) => {
+  const { image, subtitle, date } = req.body;
   try {
-    const query = `UPDATE gallery SET images = ? WHERE id = ?`;
-    db.query(query, [images, id], function (error, result) {
-      if (error) { throw error }
-      if (result.affectedRows > 0) {
-        res.send(true);
+    const imageEscaped = escapeQuotes(image || '');
+    const subtitleEscaped = escapeQuotes(subtitle || '');
+    const dateEscaped = escapeQuotes(date || '');
+    
+    const query = `INSERT INTO galleryProgram (image, subtitle, date) VALUES (?, ?, ?)`;
+    db.query(query, [imageEscaped, subtitleEscaped, dateEscaped], function (error, result) {
+      if (error) {
+        console.error('프로그램 갤러리 추가 오류:', error);
+        res.send(false);
         res.end();
+        return;
+      }
+      if (result.insertId) {
+        res.json({ success: true, id: result.insertId });
       } else {
         res.send(false);
-        res.end();
       }
+      res.end();
     });
   } catch (error) {
+    console.error('프로그램 갤러리 추가 오류:', error);
     res.send(false);
     res.end();
   }
 });
 
-// 갤러리 단일 항목 업데이트/삭제
-router.post('/gallery/updateitem', conditionalGalleryUpload, async (req, res) => {
-  const { id, index, image, subtitle, date, action } = req.body;
-  const indexNum = Number(index);
-
+// 프로그램 갤러리 항목 수정
+router.post('/galleryprogram/update', conditionalGalleryUpload, async (req, res) => {
+  const { id, image, subtitle, date } = req.body;
   try {
-    const getQuery = `SELECT images FROM gallery WHERE id = ?`;
+    const imageEscaped = escapeQuotes(image || '');
+    const subtitleEscaped = escapeQuotes(subtitle || '');
+    const dateEscaped = escapeQuotes(date || '');
+    
+    const query = `UPDATE galleryProgram SET image = ?, subtitle = ?, date = ? WHERE id = ?`;
+    db.query(query, [imageEscaped, subtitleEscaped, dateEscaped, id], function (error, result) {
+      if (error) {
+        console.error('프로그램 갤러리 수정 오류:', error);
+        res.send(false);
+        res.end();
+        return;
+      }
+      if (result.affectedRows > 0) {
+        res.send(true);
+      } else {
+        res.send(false);
+      }
+      res.end();
+    });
+  } catch (error) {
+    console.error('프로그램 갤러리 수정 오류:', error);
+    res.send(false);
+    res.end();
+  }
+});
+
+// 프로그램 갤러리 항목 삭제
+router.post('/galleryprogram/delete', async (req, res) => {
+  const { id } = req.body;
+  try {
+    // 먼저 이미지 파일명 가져오기
+    const getQuery = `SELECT image FROM galleryProgram WHERE id = ?`;
     db.query(getQuery, [id], function (error, result) {
       if (error) {
-        console.error('갤러리 데이터 조회 오류:', error);
+        console.error('프로그램 갤러리 조회 오류:', error);
         res.send(false);
         res.end();
         return;
       }
-      if (result.length === 0) {
-        res.send(false);
-        res.end();
-        return;
-      }
-      try {
-        const list = JSON.parse(result[0].images || '[]');
-        if (action === 'delete') {
-          if (!Number.isNaN(indexNum) && indexNum >= 0 && indexNum < list.length) {
-            const oldImage = list[indexNum]?.image;
-            list.splice(indexNum, 1);
-            // 파일 삭제 시도
-            if (oldImage) {
-              const filePath = `./build/images/gallery/${oldImage}`;
-              if (fs.existsSync(filePath)) {
-                fs.unlink(filePath, (err) => {
-                  if (err) console.error('갤러리 파일 삭제 오류:', err);
-                });
-              }
-            }
-          }
-        } else if (action === 'clearImage') {
-          if (!Number.isNaN(indexNum) && indexNum >= 0 && indexNum < list.length) {
-            const oldImage = list[indexNum]?.image;
-            if (oldImage) {
-              const filePath = `./build/images/gallery/${oldImage}`;
-              if (fs.existsSync(filePath)) {
-                fs.unlink(filePath, (err) => {
-                  if (err) console.error('갤러리 파일 삭제 오류:', err);
-                });
-              }
-            }
-            // 이미지 필드만 비우고 항목은 유지
-            list[indexNum] = { ...list[indexNum], image: '' };
-          }
-        } else {
-          if (!Number.isNaN(indexNum) && indexNum >= 0 && indexNum < list.length) {
-            const oldImage = list[indexNum]?.image;
-            list[indexNum] = { image: image || oldImage || '', subtitle: subtitle || '', date: date || '' };
-            // 교체된 경우 이전 파일 삭제
-            if (image && oldImage && image !== oldImage) {
-              const filePath = `./build/images/gallery/${oldImage}`;
-              if (fs.existsSync(filePath)) {
-                fs.unlink(filePath, (err) => {
-                  if (err) console.error('갤러리 파일 삭제 오류:', err);
-                });
-              }
-            }
-          } else {
-            list.push({ image: image || '', subtitle: subtitle || '', date: date || '' });
-          }
+      if (result.length > 0 && result[0].image) {
+        const filePath = `./build/images/gallery/${result[0].image}`;
+        if (fs.existsSync(filePath)) {
+          fs.unlink(filePath, (err) => {
+            if (err) console.error('프로그램 갤러리 파일 삭제 오류:', err);
+          });
         }
-
-        const updateQuery = `UPDATE gallery SET images = ? WHERE id = ?`;
-        const updated = JSON.stringify(list);
-        db.query(updateQuery, [updated, id], function (updateError, updateResult) {
-          if (updateError) {
-            console.error('갤러리 항목 업데이트 오류:', updateError);
-            res.send(false);
-            res.end();
-            return;
-          }
-          if (updateResult.affectedRows > 0) {
-            res.send(true);
-            res.end();
-          } else {
-            res.send(false);
-            res.end();
-          }
-        });
-      } catch (parseError) {
-        console.error('JSON 파싱 오류:', parseError);
-        res.send(false);
-        res.end();
       }
+      
+      const deleteQuery = `DELETE FROM galleryProgram WHERE id = ?`;
+      db.query(deleteQuery, [id], function (deleteError, deleteResult) {
+        if (deleteError) {
+          console.error('프로그램 갤러리 삭제 오류:', deleteError);
+          res.send(false);
+          res.end();
+          return;
+        }
+        if (deleteResult.affectedRows > 0) {
+          res.send(true);
+        } else {
+          res.send(false);
+        }
+        res.end();
+      });
     });
   } catch (error) {
-    console.error('갤러리 항목 업데이트 오류:', error);
+    console.error('프로그램 갤러리 삭제 오류:', error);
     res.send(false);
     res.end();
   }
 });
+
+// 후원물품 갤러리 항목 추가
+router.post('/gallerysupport/add', conditionalGalleryUpload, async (req, res) => {
+  const { image, subtitle, date } = req.body;
+  try {
+    const imageEscaped = escapeQuotes(image || '');
+    const subtitleEscaped = escapeQuotes(subtitle || '');
+    const dateEscaped = escapeQuotes(date || '');
+    
+    const query = `INSERT INTO gallerySupport (image, subtitle, date) VALUES (?, ?, ?)`;
+    db.query(query, [imageEscaped, subtitleEscaped, dateEscaped], function (error, result) {
+      if (error) {
+        console.error('후원물품 갤러리 추가 오류:', error);
+        res.send(false);
+        res.end();
+        return;
+      }
+      if (result.insertId) {
+        res.json({ success: true, id: result.insertId });
+      } else {
+        res.send(false);
+      }
+      res.end();
+    });
+  } catch (error) {
+    console.error('후원물품 갤러리 추가 오류:', error);
+    res.send(false);
+    res.end();
+  }
+});
+
+// 후원물품 갤러리 항목 수정
+router.post('/gallerysupport/update', conditionalGalleryUpload, async (req, res) => {
+  const { id, image, subtitle, date } = req.body;
+  try {
+    const imageEscaped = escapeQuotes(image || '');
+    const subtitleEscaped = escapeQuotes(subtitle || '');
+    const dateEscaped = escapeQuotes(date || '');
+    
+    const query = `UPDATE gallerySupport SET image = ?, subtitle = ?, date = ? WHERE id = ?`;
+    db.query(query, [imageEscaped, subtitleEscaped, dateEscaped, id], function (error, result) {
+      if (error) {
+        console.error('후원물품 갤러리 수정 오류:', error);
+        res.send(false);
+        res.end();
+        return;
+      }
+      if (result.affectedRows > 0) {
+        res.send(true);
+      } else {
+        res.send(false);
+      }
+      res.end();
+    });
+  } catch (error) {
+    console.error('후원물품 갤러리 수정 오류:', error);
+    res.send(false);
+    res.end();
+  }
+});
+
+// 후원물품 갤러리 항목 삭제
+router.post('/gallerysupport/delete', async (req, res) => {
+  const { id } = req.body;
+  try {
+    // 먼저 이미지 파일명 가져오기
+    const getQuery = `SELECT image FROM gallerySupport WHERE id = ?`;
+    db.query(getQuery, [id], function (error, result) {
+      if (error) {
+        console.error('후원물품 갤러리 조회 오류:', error);
+        res.send(false);
+        res.end();
+        return;
+      }
+      if (result.length > 0 && result[0].image) {
+        const filePath = `./build/images/gallery/${result[0].image}`;
+        if (fs.existsSync(filePath)) {
+          fs.unlink(filePath, (err) => {
+            if (err) console.error('후원물품 갤러리 파일 삭제 오류:', err);
+          });
+        }
+      }
+      
+      const deleteQuery = `DELETE FROM gallerySupport WHERE id = ?`;
+      db.query(deleteQuery, [id], function (deleteError, deleteResult) {
+        if (deleteError) {
+          console.error('후원물품 갤러리 삭제 오류:', deleteError);
+          res.send(false);
+          res.end();
+          return;
+        }
+        if (deleteResult.affectedRows > 0) {
+          res.send(true);
+        } else {
+          res.send(false);
+        }
+        res.end();
+      });
+    });
+  } catch (error) {
+    console.error('후원물품 갤러리 삭제 오류:', error);
+    res.send(false);
+    res.end();
+  }
+});
+
+
+// (삭제됨) gallery 테이블 관련 라우트 제거
 
 // 갤러리 이미지 단일 파일 삭제
 router.post('/gallery/deleteimage', async (req, res) => {

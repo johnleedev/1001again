@@ -13,19 +13,20 @@ interface GalleryProps {
 
 export default function G2_SupportImage (props:any) {
  
-  const [program, setProgram] = useState<GalleryProps[]>([]);
+  const [program, setProgram] = useState<any[]>([]);
 
   const fetchPosts = async () => {
-    const res = await axios.get(`${MainURL}/main/getgallery`)
-    if (res.data) {
-      const copy = [...res.data]
-      const result = copy.map((item:any) => ({
-        ...item,
-        images: JSON.parse(item.images)
-      }));
-      const resultCopy = result.filter((e:any)=> e.title === '후원물품');
-      setProgram(resultCopy);
-    } 
+    try {
+      const res = await axios.get(`${MainURL}/main/getgallerysupport`)
+      if (res.data && Array.isArray(res.data)) {
+        setProgram(res.data);
+      } else {
+        setProgram([]);
+      }
+    } catch (error) {
+      console.error('후원물품 갤러리 조회 오류:', error);
+      setProgram([]);
+    }
   };
 
   useEffect(() => {
@@ -41,39 +42,37 @@ export default function G2_SupportImage (props:any) {
         transition={{ duration: 0.8 }}
         viewport={{ once: true, amount: 0.2 }}
       >
-      {  
-        program?.map((item:any, index:any)=>{
+      <div>
+        <div className="homepage_detail_titlebox">
+          <p className="homepage_detail_title">후원물품</p>
+        </div>
 
-          return (
-            <div key={index}>
-              <div className="homepage_detail_titlebox">
-                <p className="homepage_detail_title">{item.title}</p>
-              </div>
-
-              <div className="program-box">
-              {  
-                item.images.map((subItem:any, subIndex:any)=>{
-
-                  return (
-                    <div className="program-content" key={subIndex}>
-                      <div className="program-content-imagebox">
-                        <div className="program-content-image">
-                          <img src={`${MainURL}/images/gallery/${subItem.image}`} alt='profileImage'/>
-                        </div>
-                      </div>
-                      <div className="program-content-textbox">
-                        <div className="program-content-programName">{subItem.subtitle}</div>
-                        <div className="program-content-notice">{subItem.date}</div>
-                      </div>
+        <div className="program-box">
+          {  
+            program && program.length > 0
+            ?
+            program.map((item:any, index:any)=>{
+              return (
+                <div className="program-content" key={index}>
+                  <div className="program-content-imagebox">
+                    <div className="program-content-image">
+                      <img src={`${MainURL}/images/gallery/${item.image}`} alt='profileImage'/>
                     </div>
-                  )
-                })
-              }
-              </div>   
-            </div>   
-          )
-        })
-      }
+                  </div>
+                  <div className="program-content-textbox">
+                    <div className="program-content-programName">{item.subtitle}</div>
+                    <div className="program-content-notice">{item.date}</div>
+                  </div>
+                </div>
+              )
+            })
+            :
+            <div style={{textAlign: 'center', padding: '50px', color: '#999'}}>
+              등록된 후원물품이 없습니다.
+            </div>
+          }
+        </div>   
+      </div>
       </motion.div>
       <Footer />
     </div> 

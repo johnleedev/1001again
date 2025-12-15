@@ -42,12 +42,19 @@ export default function Post () {
   const [imageLoading, setImageLoading] = useState<boolean>(false);
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     try {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+      const validFiles = acceptedFiles.filter(f => allowedTypes.includes(f.type));
+      if (validFiles.length === 0) {
+        alert('jpg, jpeg, png 형식의 이미지 파일만 업로드할 수 있습니다.');
+        return;
+      }
+
       const options = {
         maxSizeMB: 1,
         maxWidthOrHeight: 1000
       };
       const resizedFiles = await Promise.all(
-        acceptedFiles.map(async (file) => {
+        validFiles.map(async (file) => {
           setImageLoading(true);
           const resizingBlob = await imageCompression(file, options);
           return resizingBlob;
@@ -56,15 +63,19 @@ export default function Post () {
       const userIdCopy = userData?.userAccount.slice(0,5);
       const fileCopies = resizedFiles.map((resizedFile, index) => {
         const randomString = generateRandomString(10);
-        return new File([resizedFile], `${date}${userIdCopy}_${randomString}`, {
-          type: acceptedFiles[index].type,
+        const originalFile = validFiles[index];
+        const mime = originalFile.type || '';
+        const extension = mime.includes('png')
+          ? '.png'
+          : mime.includes('jpeg') || mime.includes('jpg')
+            ? '.jpg'
+            : '.jpg';
+        return new File([resizedFile], `${date}${userIdCopy}_${randomString}${extension}`, {
+          type: originalFile.type,
         });
       });
       setImageFiles(fileCopies);
-      const imageNames = acceptedFiles.map((file, index) => {
-        const randomString = generateRandomString(10);
-        return `${date}${userIdCopy}_${randomString}`;
-      });
+      const imageNames = fileCopies.map((file) => file.name);
       setInputImages(imageNames);
       setImageLoading(false);
     } catch (error) {
